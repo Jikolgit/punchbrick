@@ -1,0 +1,65 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #1a1a2e;
+}
+
+#game-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Bouton tactile Mobile */
+#action-button {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ff4757 0%, #ff6b81 100%);
+  border: 4px solid #ffffff;
+  box-shadow: 0 0 18px rgba(255, 71, 87, 0.7), inset 0 0 8px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  outline: none;
+  z-index: 100;
+  touch-action: manipulation;
+  transition: transform 0.05s ease, box-shadow 0.05s ease;
+}
+
+#action-button:active {
+  transform: translateX(-50%) scale(0.92);
+  box-shadow: 0 0 10px rgba(255, 71, 87, 0.9), inset 0 0 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Style du bouton restart s'il est dans l'UI */
+#restart-button, #restrart-button {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  background: #00d2d3;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 100;
+}
