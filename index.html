@@ -8,8 +8,46 @@
   </head>
   <body>
     <div id="game-container">
-       <div id="restrart-button">Restart</div>
-    </div>
+   <button id="pause-button" class="hidden">Pause</button>
+
+   <div id="hud" class="hidden">
+     <div>❤️ <span id="lives-value">4</span></div>
+     <div>💪 <span id="force-value">1</span></div>
+     <div>⭐ <span id="score-value">0</span></div>
+   </div>
+
+   <div id="pause-screen" class="hidden">
+      <button id="restrart-button">Restart</button>
+      <button id="back-to-title-from-pause-button">Menu principal</button>
+   </div>
+
+   <div id="title-screen">
+      <h1>BLOCK BREAKER</h1>
+      <p id="best-score-display">Meilleur score : 0 — Blocs cassés : 0</p>
+      <button id="start-adventure-button" disabled>ADVENTURE</button>
+      <button id="start-challenge-button">CHALLENGE</button>
+   </div>
+
+   <div id="level-select-screen" class="hidden">
+      <h2>SÉLECTION DU NIVEAU</h2>
+      <div id="level-list">
+        <button class="level-button" data-level="1">1</button>
+        <button class="level-button" data-level="2">2</button>
+        <button class="level-button" data-level="3">3</button>
+        <button class="level-button" data-level="4">4</button>
+        <button class="level-button" data-level="5">5</button>
+      </div>
+      <button id="back-to-title-button">Retour</button>
+   </div>
+
+   <div id="game-over-screen" class="hidden">
+      <h2>GAME OVER</h2>
+      <p>Score : <span id="final-score">0</span></p>
+      <p>Blocs cassés : <span id="final-blocks-broken">0</span></p>
+      <button id="game-over-restart-button">Rejouer</button>
+      <button id="game-over-menu-button">Menu principal</button>
+   </div>
+</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

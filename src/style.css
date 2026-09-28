@@ -27,6 +27,7 @@ canvas {
 
 /* Bouton tactile Mobile */
 #action-button {
+  display:none;
   position: absolute;
   bottom: 40px;
   left: 50%;
@@ -50,7 +51,7 @@ canvas {
 }
 
 /* Style du bouton restart s'il est dans l'UI */
-#restart-button, #restrart-button {
+#restart-button {
   position: absolute;
   top: 20px;
   right: 20px;
@@ -62,4 +63,162 @@ canvas {
   font-weight: bold;
   cursor: pointer;
   z-index: 100;
+}
+/* Affiche le bouton tactile sur petits écrans */
+@media (max-width: 500px) {
+  #action-button {
+    display: block;
+  }
+}
+/* Debug : position de la caméra */
+#debug-ui {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #00ff99;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 6px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+#pause-button
+{
+    position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  background: #101b1b;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 100;
+}
+#pause-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 200; /* au-dessus de la jauge et du bouton d'action */
+}
+
+#pause-screen.hidden {
+  display: none;
+}
+
+#title-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(26, 26, 46, 0.95);
+  z-index: 300; /* au-dessus de la pause */
+}
+
+#title-screen.hidden {
+  display: none;
+}
+.hidden {
+  display: none;
+}
+#level-select-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px; /* marge sur les côtés et en haut/bas */
+  background: rgba(26, 26, 46, 0.95);
+  z-index: 300;
+  overflow-y: auto; /* évite que le contenu soit coupé si l'écran est bas */
+}
+
+#level-select-screen {
+  display: none;
+}
+
+#level-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 16px;
+  max-width: 700px;
+  width: 100%;       /* s'adapte à la largeur disponible avec le padding */
+  margin: 0 auto;
+}
+
+.level-button {
+  width: 100px;
+  height: 100px;
+  background: #16213e;
+  color: #fff;
+  border: 2px solid #ffffff;
+  border-radius: 8px;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.level-button:hover {
+  background: #00d2d3;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#hud {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 20px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-family: sans-serif;
+  font-weight: bold;
+  border-radius: 8px;
+  z-index: 100;
+}
+
+#hud.hidden {
+  display: none;
+}
+
+#game-over-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: rgba(26, 26, 46, 0.95);
+  color: #fff;
+  z-index: 300;
+}
+
+#game-over-screen.hidden {
+  display: none;
 }

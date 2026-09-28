@@ -9,7 +9,7 @@ export class SceneManager {
   private container: HTMLElement;
 
   // Variables pour le Screen Shake
-  private baseCameraPosition = new THREE.Vector3(8.85, 9.5, 12.31);
+  private baseCameraPosition = new THREE.Vector3(16.29, 13.05, 9.54);
   private shakeIntensity = 0;
   private shakeDecay = 5;
 

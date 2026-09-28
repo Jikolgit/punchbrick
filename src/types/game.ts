@@ -1,4 +1,4 @@
-export type PunchState = 'idle' | 'prepare' | 'down' | 'up';
+export type PunchState = 'idle' | 'prepare' | 'down' | 'shake' | 'up';
 
 export interface PunchConfig {
   startY: number;
