@@ -17,9 +17,10 @@ export class Block {
   public hp: number;
   public maxHp: number;
 
-  // Animation fluide de la jauge HP
+  // Traînée de dégâts : suit les HP réels avec un léger retard
   private displayedHp: number;
   private hpAnimationSpeed = 4;
+  private trailDelay = 0;
 
   // --- Animation de chute depuis le haut ---
   public isFalling = true;
@@ -32,7 +33,7 @@ export class Block {
   // --- Effet de poussière (smoketxt.png) ---
   private dustParticles: DustParticle[] = [];
   private static dustTexture: THREE.Texture | null = null;
-  private hasLanded = false;
+  public hasLanded = false;
 
   private scene: THREE.Scene;
   private baseX: number;
@@ -46,6 +47,19 @@ export class Block {
   private canvas: HTMLCanvasElement;
   private context: CanvasRenderingContext2D;
   private texture: THREE.CanvasTexture;
+  private barWidth = 7;
+  private barHeight = 0.6;
+  private barAppearProgress = 0; // 0 → 1 : animation d'apparition
+  private barFlashTimer = 0;
+  private readonly barFlashDuration = 0.18;
+
+  // Destruction : la barre reste affichée, se vide, puis disparaît en fondu
+  private isBreaking = false;
+  private breakTimer = 0;
+  private barFadeOut = 1; // 1 → 0 pendant la disparition
+  private readonly breakHoldDuration = 0.2;
+  private readonly breakFadeDuration = 0.3;
+  public isDead = false;
 
   constructor(scene: THREE.Scene, modelTemplate: THREE.Object3D, resistance: number = 1) {
     this.scene = scene;
@@ -72,14 +86,17 @@ export class Block {
     }
 
     // Canvas pour le rendu de la barre de vie
+    // Largeur de la barre selon la résistance, canvas au même ratio pour éviter la déformation
+    this.barWidth = Math.max(5, this.maxHp * 1.25);
     this.canvas = document.createElement('canvas');
-    this.canvas.width = 256;
-    this.canvas.height = 32;
+    this.canvas.width = 512;
+    this.canvas.height = Math.round((512 * this.barHeight) / this.barWidth);
     this.context = this.canvas.getContext('2d')!;
     this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.colorSpace = THREE.SRGBColorSpace;
 
     this.createHealthBar();
-    this.updateHealthBarTexture();
+    this.drawHealthBar();
   }
 
   private createHealthBar(): void {
@@ -87,18 +104,67 @@ export class Block {
       map: this.texture,
       transparent: true,
       depthTest: false,
+      opacity: 0,
     });
 
     this.healthBarSprite = new THREE.Sprite(spriteMaterial);
-
-    // Ajustement de la largeur globale de la barre
-    const barWidth = Math.max(3.5, this.maxHp * 1.0);
-    const barHeight = 0.65;
-    this.healthBarSprite.scale.set(barWidth, barHeight, 1);
+    this.healthBarSprite.renderOrder = 10;
+    this.healthBarSprite.scale.set(this.barWidth, this.barHeight, 1);
 
     this.updateHealthBarPosition();
 
+    // Cachée pendant la chute, affichée une fois le bloc posé au sol
+    this.healthBarSprite.visible = false;
+
     this.scene.add(this.healthBarSprite);
+  }
+
+  private showHealthBar(): void {
+    if (!this.healthBarSprite || this.healthBarSprite.visible) return;
+    this.healthBarSprite.visible = true;
+    this.barAppearProgress = 0;
+  }
+
+  /**
+   * Animation de la barre : apparition (fondu + pop), flash d'impact, traînée de dégâts
+   */
+  private updateHealthBar(deltaTime: number): void {
+    if (!this.healthBarSprite || !this.healthBarSprite.visible) return;
+
+    let needsRedraw = false;
+
+    // Apparition : fondu + léger rebond d'échelle
+    if (this.barAppearProgress < 1) {
+      this.barAppearProgress = Math.min(1, this.barAppearProgress + deltaTime / 0.25);
+    }
+    const t = this.barAppearProgress;
+    const c1 = 1.70158;
+    const easeOutBack = 1 + (c1 + 1) * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+
+    // Flash d'impact
+    if (this.barFlashTimer > 0) {
+      this.barFlashTimer = Math.max(0, this.barFlashTimer - deltaTime);
+      needsRedraw = true;
+    }
+    const flash = this.barFlashTimer / this.barFlashDuration;
+
+    const fade = this.barFadeOut;
+    const scale = (0.6 + 0.4 * easeOutBack) * (1 + 0.1 * flash) * (0.7 + 0.3 * fade);
+    this.healthBarSprite.scale.set(this.barWidth * scale, this.barHeight * scale, 1);
+    this.healthBarSprite.material.opacity = t * fade;
+
+    // Traînée : attend un court instant puis se vide jusqu'aux HP réels
+    const realHp = Math.max(0, this.hp);
+    if (this.displayedHp > realHp) {
+      if (this.trailDelay > 0) {
+        this.trailDelay -= deltaTime;
+      } else {
+        this.displayedHp = Math.max(realHp, this.displayedHp - this.hpAnimationSpeed * deltaTime);
+      }
+      needsRedraw = true;
+    }
+
+    if (needsRedraw) this.drawHealthBar();
   }
 
   private updateHealthBarPosition(): void {
@@ -108,39 +174,93 @@ export class Block {
     this.healthBarSprite.position.set(this.mesh.position.x, bottomY - 0.5, this.mesh.position.z);
   }
 
-  private updateHealthBarTexture(): void {
+  private getHealthColors(ratio: number): { light: string; base: string; dark: string } {
+    if (ratio > 0.6) return { light: '#8dffb0', base: '#2ecc71', dark: '#1a8a4a' };
+    if (ratio > 0.3) return { light: '#ffe98a', base: '#f5b700', dark: '#b37a00' };
+    return { light: '#ff9a8f', base: '#e8392e', dark: '#9c1a14' };
+  }
+
+  private drawHealthBar(): void {
     if (!this.context || !this.healthBarSprite) return;
 
     const ctx = this.context;
-    const width = this.canvas.width;
-    const height = this.canvas.height;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    if (this.maxHp <= 0) return;
 
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, w, h);
 
-    const totalSegments = this.maxHp;
-    if (totalSegments <= 0) return;
+    const border = Math.max(3, h * 0.14);
+    const ix = border;
+    const iy = border;
+    const iw = w - border * 2;
+    const ih = h - border * 2;
+    const radius = ih / 2;
 
-    const segmentWidth = width / totalSegments;
+    // 1. Contour extérieur (capsule sombre)
+    ctx.fillStyle = '#0d0f16';
+    ctx.beginPath();
+    ctx.roundRect(0, 0, w, h, h / 2);
+    ctx.fill();
 
-    for (let i = 0; i < totalSegments; i++) {
-      const x = i * segmentWidth;
-      const fillAmount = Math.max(0, Math.min(1, this.displayedHp - i));
+    // Tout le contenu est découpé dans la capsule intérieure
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(ix, iy, iw, ih, radius);
+    ctx.clip();
 
-      // 1. Fond bleu ardoise (santé perdue)
-      ctx.fillStyle = '#3b4a6b';
-      ctx.fillRect(x, 0, segmentWidth, height);
+    // 2. Fond de la jauge (santé perdue) avec ombre interne
+    const trackGrad = ctx.createLinearGradient(0, iy, 0, iy + ih);
+    trackGrad.addColorStop(0, '#141926');
+    trackGrad.addColorStop(1, '#2a3247');
+    ctx.fillStyle = trackGrad;
+    ctx.fillRect(ix, iy, iw, ih);
 
-      // 2. Remplissage vert (santé active)
-      if (fillAmount > 0) {
-        ctx.fillStyle = '#2ecc71';
-        ctx.fillRect(x, 0, segmentWidth * fillAmount, height);
-      }
+    const realHp = Math.max(0, this.hp);
+    const ratio = realHp / this.maxHp;
+    const flash = this.barFlashTimer / this.barFlashDuration;
 
-      // 3. Contour noir net
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(x, 0, segmentWidth, height);
+    // 3. Traînée de dégâts (santé qui vient d'être perdue)
+    const trailW = iw * (this.displayedHp / this.maxHp);
+    if (trailW > 0) {
+      ctx.fillStyle = flash > 0 ? '#ffffff' : '#ffd9a0';
+      ctx.fillRect(ix, iy, trailW, ih);
     }
+
+    // 4. Remplissage principal avec dégradé vertical selon le niveau de vie
+    const fillW = iw * ratio;
+    if (fillW > 0) {
+      const colors = this.getHealthColors(ratio);
+      const fillGrad = ctx.createLinearGradient(0, iy, 0, iy + ih);
+      fillGrad.addColorStop(0, colors.light);
+      fillGrad.addColorStop(0.45, colors.base);
+      fillGrad.addColorStop(1, colors.dark);
+      ctx.fillStyle = fillGrad;
+      ctx.fillRect(ix, iy, fillW, ih);
+
+      // Flash blanc à l'impact
+      if (flash > 0) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.7 * flash})`;
+        ctx.fillRect(ix, iy, fillW, ih);
+      }
+    }
+
+    // 5. Reflet brillant sur la moitié haute
+    const glossGrad = ctx.createLinearGradient(0, iy, 0, iy + ih * 0.5);
+    glossGrad.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+    glossGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = glossGrad;
+    ctx.fillRect(ix, iy, iw, ih * 0.5);
+
+    // 6. Séparateurs entre chaque point de vie
+    ctx.fillStyle = 'rgba(13, 15, 22, 0.85)';
+    const sepW = Math.max(2, border * 0.6);
+    for (let i = 1; i < this.maxHp; i++) {
+      const x = ix + (iw * i) / this.maxHp;
+      ctx.fillRect(x - sepW / 2, iy, sepW, ih);
+    }
+
+    ctx.restore();
 
     this.texture.needsUpdate = true;
   }
@@ -233,6 +353,9 @@ private triggerDustImpact(count = 18): void {
 
   public takeDamage(amount: number): boolean {
     this.hp -= amount;
+    this.barFlashTimer = this.barFlashDuration;
+    this.trailDelay = 0.25;
+    this.drawHealthBar();
     return this.hp <= 0;
   }
 
@@ -241,8 +364,16 @@ private triggerDustImpact(count = 18): void {
   }
 
   public update(deltaTime: number): void {
+    if (this.isDead) return;
+
     // 1. Mise à jour de l'effet de poussière
     this.updateDust(deltaTime);
+
+    // Bloc détruit : seule la barre de vie reste, elle se vide puis s'efface
+    if (this.isBreaking) {
+      this.updateBreaking(deltaTime);
+      return;
+    }
 
     // 2. Animation de chute depuis le haut
     if (this.isFalling) {
@@ -267,6 +398,7 @@ private triggerDustImpact(count = 18): void {
         } else {
           this.fallVelocity = 0;
           this.isFalling = false;
+          this.showHealthBar();
         }
       }
 
@@ -275,14 +407,8 @@ private triggerDustImpact(count = 18): void {
       return;
     }
 
-    // 3. Animation fluide de la jauge HP
-    if (this.displayedHp > this.hp) {
-      this.displayedHp -= this.hpAnimationSpeed * deltaTime;
-      if (this.displayedHp < this.hp) {
-        this.displayedHp = this.hp;
-      }
-      this.updateHealthBarTexture();
-    }
+    // 3. Animation de la barre de vie (apparition, flash, traînée)
+    this.updateHealthBar(deltaTime);
 
     // 4. Suivi de position de la barre de vie sous le bloc
     this.updateHealthBarPosition();
@@ -304,9 +430,29 @@ private triggerDustImpact(count = 18): void {
       this.baseX + Math.sin(elapsed * this.shakeFrequency) * this.shakeAmplitude * damping;
   }
 
+  private updateBreaking(deltaTime: number): void {
+    this.updateHealthBar(deltaTime);
+
+    // On attend que la traînée soit vide et le flash terminé avant le fondu
+    const barSettled = this.displayedHp <= 0 && this.barFlashTimer <= 0;
+    if (barSettled) {
+      this.breakTimer += deltaTime;
+      const fadeT = (this.breakTimer - this.breakHoldDuration) / this.breakFadeDuration;
+      this.barFadeOut = 1 - Math.max(0, Math.min(1, fadeT));
+    }
+
+    if (this.barFadeOut <= 0 && this.dustParticles.length === 0) {
+      this.destroy();
+    }
+  }
+
   public breakIntoPieces(count: number): BlockFragment[] {
-    if (this.healthBarSprite) {
-      this.healthBarSprite.visible = false;
+    // Vide la barre si le bloc est cassé sans avoir pris de dégâts (ex: bloc bonus)
+    if (this.hp > 0) {
+      this.hp = 0;
+      this.barFlashTimer = this.barFlashDuration;
+      this.trailDelay = 0.25;
+      this.drawHealthBar();
     }
 
     const fragments: BlockFragment[] = [];
@@ -330,11 +476,24 @@ private triggerDustImpact(count = 18): void {
       );
     }
 
-    this.destroy();
+    // Le mesh disparaît tout de suite, la barre reste jusqu'à la fin de son animation
+    if (this.mesh.parent) {
+      this.mesh.parent.remove(this.mesh);
+    }
+
+    if (this.healthBarSprite?.visible) {
+      this.shakeTimer = 0;
+      this.isBreaking = true;
+    } else {
+      this.destroy();
+    }
+
     return fragments;
   }
 
   public destroy(): void {
+    this.isDead = true;
+
     // Nettoyage de la poussière restante
     for (const p of this.dustParticles) {
       this.scene.remove(p.sprite);

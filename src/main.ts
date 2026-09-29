@@ -1,4 +1,5 @@
 import { SceneManager } from './managers/SceneManager';
+import { SoundManager } from './managers/SoundManager';
 import { Block } from './components/Block';
 import { Fist } from './components/Fist';
 import { BlockFragment } from './components/BlockFragment';
@@ -27,11 +28,14 @@ class Game {
   private static readonly DEBUG_FORCE_VALUE = 99; // force "instant break" pour les tests
 
   private sceneManager: SceneManager;
+  private sound: SoundManager;
   private block: Block | null = null;
   private fist: Fist | null = null;
   private powerMeter: PowerMeter;
   private touchControls: TouchControls;
   private fragments: BlockFragment[] = [];
+  // Blocs cassés dont la barre de vie termine son animation avant de disparaître
+  private breakingBlocks: Block[] = [];
   private debugUI: DebugUI;
   private loadedModels: LoadedModels | null = null;
 
@@ -86,6 +90,7 @@ class Game {
 
   constructor() {
     this.sceneManager = new SceneManager();
+    this.sound = new SoundManager();
     this.debugUI = new DebugUI();
     this.powerMeter = new PowerMeter();
 
@@ -112,6 +117,13 @@ class Game {
     this.finalScoreEl = document.getElementById('final-score');
     this.finalBlocksEl = document.getElementById('final-blocks-broken');
     this.bestScoreDisplayEl = document.getElementById('best-score-display');
+
+    // Son de clic sur tous les boutons d'interface
+    document.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement | null)?.closest('button')) {
+        this.sound.uiClick();
+      }
+    });
 
     // Écran titre
     document
@@ -373,6 +385,7 @@ class Game {
     }
 
     if (!this.block) {
+      this.sound.punch();
       this.fist.triggerPunch();
       return;
     }
@@ -386,6 +399,7 @@ class Game {
 
   private handleNormalPunch(): void {
     this.isSuccessHit = this.powerMeter.stop();
+    this.sound.punch();
 
     if (this.isSuccessHit) {
       const willBreak = this.block!.hp <= this.force;
@@ -409,11 +423,13 @@ class Game {
 
     if (result.zoneId !== null) {
       const allZonesActivated = result.activatedOrder.length >= this.currentSpecialZones.length;
+      this.sound.zoneActivate(result.activatedOrder.length - 1);
 
       if (allZonesActivated) {
         // Toutes les zones sont allumées : le poing frappe et casse le bloc automatiquement
         this.pendingSpecialOutcome = 'break';
         this.pendingSpecialActivatedOrder = result.activatedOrder;
+        this.sound.punch();
         this.fist!.triggerPunch();
       }
       // Sinon : coup "chargé", pas de frappe sur le bloc pour l'instant
@@ -421,6 +437,8 @@ class Game {
       // donc la jauge repart d'elle-même au prochain instant.
       return;
     }
+
+    this.sound.punch();
 
     if (result.activatedOrder.length > 0) {
       // Raté en dehors des zones, mais au moins une zone déjà activée : le bloc casse
@@ -443,6 +461,11 @@ class Game {
 
     if (event.code === 'Escape') {
       this.togglePause();
+      return;
+    }
+
+    if (event.code === 'KeyM') {
+      this.sound.toggleMute();
       return;
     }
 
@@ -498,6 +521,7 @@ class Game {
     this.hud?.classList.add('hidden');
 
     this.saveBestStatsIfNeeded();
+    this.sound.gameOver();
 
     if (this.finalScoreEl) this.finalScoreEl.textContent = String(this.score);
     if (this.finalBlocksEl) this.finalBlocksEl.textContent = String(this.blocksBroken);
@@ -514,6 +538,9 @@ class Game {
       this.block.destroy();
       this.block = null;
     }
+
+    this.breakingBlocks.forEach((b) => b.destroy());
+    this.breakingBlocks = [];
 
     this.fragments.forEach((f) => f.update(10, this.sceneManager.scene));
     this.fragments = [];
@@ -587,17 +614,21 @@ class Game {
         this.updateHud();
 
         this.sceneManager.triggerImpactShake(0.6);
+        this.sound.breakBlock(this.block.maxHp);
 
         const newFragments = this.block.breakIntoPieces(25);
         this.fragments.push(...newFragments);
+        this.breakingBlocks.push(this.block);
         this.block = null;
         this.pendingBlockSpawn = true;
       } else {
         this.block.triggerShake();
         this.sceneManager.triggerImpactShake(0.2);
+        this.sound.hit();
       }
     } else {
       this.sceneManager.triggerImpactShake(0.15);
+      this.sound.miss();
       this.loseLife();
     }
   }
@@ -621,9 +652,11 @@ class Game {
       this.updateHud();
 
       this.sceneManager.triggerImpactShake(0.6);
+      this.sound.specialBreak(isFullyOrdered);
 
       const newFragments = this.block.breakIntoPieces(25);
       this.fragments.push(...newFragments);
+      this.breakingBlocks.push(this.block);
       this.block = null;
       this.isSpecialBlockActive = false;
       this.pendingBlockSpawn = true;
@@ -635,6 +668,7 @@ class Game {
       this.block = null;
       this.isSpecialBlockActive = false;
       this.sceneManager.triggerImpactShake(0.1);
+      this.sound.vanish();
       this.pendingBlockSpawn = true; // le prochain bloc (normal) apparaît dès la remontée du poing
     }
   }
@@ -677,8 +711,15 @@ class Game {
     }
 
     if (this.block) {
+      const wasLanded = this.block.hasLanded;
       this.block.update(deltaTime);
+      if (!wasLanded && this.block.hasLanded) {
+        this.sound.land(this.block.maxHp);
+      }
     }
+
+    this.breakingBlocks.forEach((b) => b.update(deltaTime));
+    this.breakingBlocks = this.breakingBlocks.filter((b) => !b.isDead);
 
     this.fragments.forEach((fragment) =>
       fragment.update(deltaTime, this.sceneManager.scene)
