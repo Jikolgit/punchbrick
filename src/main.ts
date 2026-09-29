@@ -32,7 +32,6 @@ class Game {
   private block: Block | null = null;
   private fist: Fist | null = null;
   private powerMeter: PowerMeter;
-  private touchControls: TouchControls;
   private fragments: BlockFragment[] = [];
   // Blocs cassés dont la barre de vie termine son animation avant de disparaître
   private breakingBlocks: Block[] = [];
@@ -94,7 +93,8 @@ class Game {
     this.debugUI = new DebugUI();
     this.powerMeter = new PowerMeter();
 
-    this.touchControls = new TouchControls(() => this.triggerPunchAction());
+    // Bouton tactile autonome : ses écouteurs vivent dans le DOM, pas besoin de garder la référence
+    new TouchControls(() => this.triggerPunchAction());
 
     this.setupScreens();
     this.updateTitleBestStats();
@@ -735,7 +735,10 @@ class Game {
         : this.block
           ? String(this.block.hp)
           : '—';
-      this.debugUI.updateGameInfo(this.currentBlockType, status, this.force);
+      const modeLabel = this.mode === 'adventure'
+        ? `aventure (niveau ${this.currentLevel ?? '?'})`
+        : this.mode ?? '—';
+      this.debugUI.updateGameInfo(this.currentBlockType, status, this.force, modeLabel);
     }
 
     this.sceneManager.render();

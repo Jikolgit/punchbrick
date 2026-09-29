@@ -36,9 +36,9 @@ export class DebugUI {
    * son état (PV, ou zones activées pour un bloc spécial), la force
    * du joueur, et les raccourcis disponibles.
    */
-  public updateGameInfo(blockType: string, blockStatus: number | string, force: number): void {
+  public updateGameInfo(blockType: string, blockStatus: number | string, force: number, mode: string): void {
     this.gameInfoElement.innerHTML = `
-      <strong>[DEV] Bloc:</strong> ${blockType} | État: ${blockStatus} | Force: ${force}<br/>
+      <strong>[DEV] Mode:</strong> ${mode} | <strong>Bloc:</strong> ${blockType} | État: ${blockStatus} | Force: ${force}<br/>
       <small>1/2/3 = type de bloc · 4 = bloc spécial · F = forcer la casse</small>
     `;
   }
